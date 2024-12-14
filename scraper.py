@@ -13,18 +13,22 @@ from selenium.webdriver.support.wait import WebDriverWait
 username = os.environ.get('username')
 password = os.environ.get('password')
 
+cwd = os.getcwd()
+
 class Browser:
     browser, options = None, None
     request_data = None
-    directory = None
+    directory: str = None
+    download_flag: bool = None
 
-    def __init__(self, directory: str):
+    def __init__(self, directory: str, download_flag: bool):
         self.options = webdriver.ChromeOptions()
         self.options.add_experimental_option("detach", True)
         self.options.page_load_strategy = 'normal'
         self.browser = webdriver.Chrome(options=self.options)
         self.request_data = {}
         self.directory = directory
+        self.download_flag = download_flag
         os.makedirs(self.directory, exist_ok=True) # Creating root directory
  
     def open_page(self, url: str):
@@ -57,41 +61,39 @@ class Browser:
         try:
             
             modules_container = self.browser.find_element(by=By.CLASS_NAME, value='ig-list')
-            module_sections = modules_container.find_elements(By.XPATH, ".//div[starts-with(@aria-label, 'Module 10')]")
+            module_sections = modules_container.find_elements(By.XPATH, ".//div[starts-with(@aria-label, 'Module')]")
 
             for div in module_sections:
                 module_name = div.get_attribute('aria-label')
-                if module_name and module_name.startswith("Module"):
-                    print(f'Processing: {module_name}')
-                    content_div = div.find_element(by=By.CLASS_NAME, value='content')
-                    modules_list = content_div.find_element(by=By.TAG_NAME, value='ul')
-                    module_items = modules_list.find_elements(by=By.TAG_NAME, value='li')
+                print(f'Processing: {module_name}')
+                content_div = div.find_element(by=By.CLASS_NAME, value='content')
+                modules_list = content_div.find_element(by=By.TAG_NAME, value='ul')
+                module_items = modules_list.find_elements(by=By.TAG_NAME, value='li')
 
-                    original_window = self.browser.current_window_handle
+                original_window = self.browser.current_window_handle
 
-                    assert len(self.browser.window_handles) == 1
+                assert len(self.browser.window_handles) == 1
 
-                    for item in module_items:
-                        try:
+                for item in module_items:
+                    try:
+                        link_type_element = item.find_element(by=By.CLASS_NAME, value="type_icon")
+                        link_title = link_type_element.get_attribute('title')
+
+                        if link_title == 'External Tool':
                             link = item.find_element(by=By.XPATH, value=".//a[@class='ig-title title item_link']")
                             title = link.get_attribute("title")
-                            
-                            # Getting second page
                             second_page = link.get_attribute("href")
-
-                            # Making sure second page is not a lab or test
-                            if self.lab_or_test(title) == False:
-                                self.browser.execute_script("window.open()")
-                                self.wait_random_time()
-                                windows = self.browser.window_handles
-                                self.browser.switch_to.window(windows[-1])
-                                self.browser.get(second_page)
-                                self.get_request_information('https://emergingtalent.contentcontroller.com/vault', module_name, title)
-                                self.wait_random_time()
-                                self.browser.close()
-                                self.browser.switch_to.window(original_window)
-                        except Exception as e:
-                            print(f'No link found in this {item.id}')
+                            self.browser.execute_script("window.open()")
+                            self.wait_random_time()
+                            windows = self.browser.window_handles
+                            self.browser.switch_to.window(windows[-1])
+                            self.browser.get(second_page)
+                            self.get_request_information('https://emergingtalent.contentcontroller.com/vault', module_name, title)
+                            self.wait_random_time()
+                            self.browser.close()
+                            self.browser.switch_to.window(original_window)
+                    except Exception as e:
+                        print(f'No link found in this {item.id}')
 
         except Exception as e:
             print(f"An error occurred: {e}")
@@ -112,11 +114,13 @@ class Browser:
                         "filename": filename
                     }
                     del self.browser.requests
-                    self.download()
+
+                    if self.download_flag == True:
+                        self.download()
+
                     return
         
     def download(self):
-        cwd = os.getcwd()
 
         url = self.request_data['url']
         headers = self.request_data['headers']
@@ -176,15 +180,10 @@ class Browser:
         
         return sanitized_string
     
-    def lab_or_test(self, text):
-        # Compile a regex to check for either 'Guided Lab' or 'Knowledge Check'
-        pattern = re.compile(r"lab|Knowledge Check|activity", re.IGNORECASE)
-        return bool(pattern.search(text))
-    
-def run_multiple_drivers(directory: str, url: str):
+def run_multiple_drivers(directory: str, url: str, download_flag: bool):
     print(f'{directory} thread starting!')
     
-    browser = Browser(directory=directory)
+    browser = Browser(directory=directory, download_flag=download_flag)
     browser.open_page('https://awsacademy.instructure.com/login/canvas')
     browser.login_awsacademy(username, password)
     time.sleep(8)
@@ -194,6 +193,8 @@ def run_multiple_drivers(directory: str, url: str):
 
 
 if __name__ == '__main__':
-    foundations = threading.Thread(target=run_multiple_drivers, args=('AWS Cloud Foundations', 'https://awsacademy.instructure.com/courses/91362/modules'))
+
+    # Run thread with True to download files
+    foundations = threading.Thread(target=run_multiple_drivers, args=('AWS Cloud Foundations', 'https://awsacademy.instructure.com/courses/91362/modules', False))
     foundations.start()
     foundations.join()
