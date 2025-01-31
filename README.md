@@ -14,9 +14,11 @@
 
 # Requirements
 
-  Python 
+  Python 3.7 >
   
-  Selenium
+  Selenium-Wire
+  
+  `pip install selenium-wire`
   
   WebDriver for your browser (e.g., ChromeDriver for Google Chrome)
 
